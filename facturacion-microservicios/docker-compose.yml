@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  auth:
+    build: .
+    command: ["auth"]
+    ports:
+      - "8081:8081"
+    environment:
+      - PORT=8081
+      - DATA_FILE=data/usuarios.json
+      - JWT_SECRET=mi-secreto-desarrollo-2026
+    volumes:
+      - ./data:/app/data
+
+  productos:
+    build: .
+    command: ["productos"]
+    ports:
+      - "8082:8082"
+    environment:
+      - PORT=8082
+      - DATA_FILE=data/productos.json
+      - JWT_SECRET=mi-secreto-desarrollo-2026
+    volumes:
+      - ./data:/app/data
+
+  clientes:
+    build: .
+    command: ["clientes"]
+    ports:
+      - "8083:8083"
+    environment:
+      - PORT=8083
+      - DATA_FILE=data/clientes.json
+      - JWT_SECRET=mi-secreto-desarrollo-2026
+    volumes:
+      - ./data:/app/data
+
+  facturacion:
+    build: .
+    command: ["facturacion"]
+    ports:
+      - "8084:8084"
+    environment:
+      - PORT=8084
+      - DATA_FILE=data/facturas.json
+      - AUTH_URL=http://auth:8081
+      - PRODUCTOS_URL=http://productos:8082
+      - CLIENTES_URL=http://clientes:8083
+    depends_on:
+      - auth
+      - productos
+      - clientes
+    volumes:
+      - ./data:/app/data
+
+  web:
+    build: .
+    command: ["web"]
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - FRONTEND_DIR=frontend
+    volumes:
+      - ./frontend:/app/frontend
+    depends_on:
+      - facturacion

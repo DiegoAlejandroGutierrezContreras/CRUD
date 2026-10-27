@@ -1,0 +1,23 @@
+[
+  {
+    "id": 1,
+    "nombre": "Ricardo Gómez",
+    "email": "ricardo@example.com",
+    "password": "$2a$10$cFnMVBoqOq8mml/szXxjceFo1/MyUpKzHxrnWHc5UALo6SLDa9vHm",
+    "rol": "admin"
+  },
+  {
+    "id": 2,
+    "nombre": "María López",
+    "email": "maria@example.com",
+    "password": "$2a$10$5cC9PsHwnqkf6D0kqKqzduIpAUplQt26l.JJKMMblCuCcnGg.fhvW",
+    "rol": "cliente"
+  },
+  {
+    "id": 3,
+    "nombre": "Diego G",
+    "email": "diego@gmail.com",
+    "password": "$2a$10$rHp487ohVYF6Kkvrk5rfT.uwK0dwBIAqS8SZmjgORQyzUJPvZwtSm",
+    "rol": "cliente"
+  }
+]

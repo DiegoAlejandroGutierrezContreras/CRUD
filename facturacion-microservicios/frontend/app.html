@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Facturación Digital</title>
+  <!-- Bootstrap 5 CSS CDN -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- jsPDF CDN para exportación a PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-light">
+
+  <!-- Contenedor para notificaciones toast -->
+  <div data-hook="toast-container" id="toast-container"></div>
+
+  <!-- Barra de navegación principal -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
+    <div class="container-fluid px-4">
+      <a class="navbar-brand d-flex align-items-center" href="#" data-hook="nav-brand">
+        <span class="fs-5 fw-bold">Facturación Microservicios</span>
+      </a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+
+      <div class="collapse navbar-collapse" id="navbarMain">
+        <!-- Pestañas de navegación de la aplicación -->
+        <ul class="navbar-nav me-auto mb-2 mb-lg-0 nav-pills" id="mainTabs" role="tablist">
+          <li class="nav-item">
+            <button class="nav-link text-white active" data-hook="nav-tab-productos" id="tab-productos" data-bs-toggle="pill" data-bs-target="#view-productos" type="button" role="tab">
+              📦 Productos
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link text-white" data-hook="nav-tab-clientes" id="tab-clientes" data-bs-toggle="pill" data-bs-target="#view-clientes" type="button" role="tab">
+              👥 Clientes
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link text-white" data-hook="nav-tab-nueva-factura" id="tab-nueva-factura" data-bs-toggle="pill" data-bs-target="#view-nueva-factura" type="button" role="tab">
+              ➕ Nueva Factura
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link text-white" data-hook="nav-tab-historial" id="tab-historial" data-bs-toggle="pill" data-bs-target="#view-historial" type="button" role="tab">
+              📋 Historial Facturas
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link text-white" data-hook="nav-tab-detalle" id="tab-detalle" data-bs-toggle="pill" data-bs-target="#view-detalle" type="button" role="tab">
+              🧾 Detalle Factura
+            </button>
+          </li>
+        </ul>
+
+        <!-- Información de Usuario y Botón de Salir -->
+        <div class="d-flex align-items-center text-white gap-3">
+          <div class="small text-end">
+            <span class="fw-semibold d-block" data-hook="nav-user-nombre">Cargando...</span>
+            <span class="text-secondary small" data-hook="nav-user-rol">(...)</span>
+          </div>
+          <button class="btn btn-outline-light btn-sm" data-hook="btn-logout" type="button">
+            Cerrar Sesión
+          </button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Contenedor Principal de Vistas -->
+  <main class="container-fluid py-4 px-4">
+    <div class="tab-content" id="mainTabsContent">
+
+      <!-- ========================================== -->
+      <!-- 1. VISTA DE PRODUCTOS                      -->
+      <!-- ========================================== -->
+      <section class="tab-pane fade show active" id="view-productos" role="tabpanel" data-hook="vista-productos">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+          <div>
+            <h1 class="h3 fw-bold text-dark mb-1">Catálogo de Productos</h1>
+            <p class="text-muted small mb-0">Gestión de inventario, precios y stock en tiempo real</p>
+          </div>
+          <div class="d-flex gap-2">
+            <input type="text" class="form-control" placeholder="Buscar por nombre..." data-hook="buscar-producto-input" style="min-width: 250px;">
+            <button class="btn btn-primary text-nowrap" data-hook="btn-nuevo-producto" type="button">
+              + Nuevo Producto
+            </button>
+          </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th style="width: 80px;">ID</th>
+                  <th>Nombre del Producto</th>
+                  <th>Precio Unitario</th>
+                  <th style="width: 140px;">Stock</th>
+                  <th style="width: 160px;" class="text-end">Acciones</th>
+                </tr>
+              </thead>
+              <tbody data-hook="productos-tabla-body">
+                <!-- Filas renderizadas dinámicamente mediante template -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- 2. VISTA DE CLIENTES                       -->
+      <!-- ========================================== -->
+      <section class="tab-pane fade" id="view-clientes" role="tabpanel" data-hook="vista-clientes">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+          <div>
+            <h1 class="h3 fw-bold text-dark mb-1">Gestión de Clientes</h1>
+            <p class="text-muted small mb-0">Registro y administración de clientes para emisión de facturas</p>
+          </div>
+          <div class="d-flex gap-2">
+            <input type="text" class="form-control" placeholder="Buscar por nombre o cédula..." data-hook="buscar-cliente-input" style="min-width: 260px;">
+            <button class="btn btn-primary text-nowrap" data-hook="btn-nuevo-cliente" type="button">
+              + Nuevo Cliente
+            </button>
+          </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th style="width: 80px;">ID</th>
+                  <th>Nombre</th>
+                  <th>Cédula (CC)</th>
+                  <th>Correo Electrónico</th>
+                  <th>Dirección</th>
+                  <th style="width: 160px;" class="text-end">Acciones</th>
+                </tr>
+              </thead>
+              <tbody data-hook="clientes-tabla-body">
+                <!-- Filas renderizadas dinámicamente mediante template -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- 3. VISTA DE NUEVA FACTURA                  -->
+      <!-- ========================================== -->
+      <section class="tab-pane fade" id="view-nueva-factura" role="tabpanel" data-hook="vista-nueva-factura">
+        <div class="mb-4">
+          <h1 class="h3 fw-bold text-dark mb-1">Generar Nueva Factura</h1>
+          <p class="text-muted small mb-0">Seleccione el cliente y añada productos al carrito de facturación</p>
+        </div>
+
+        <div class="row g-4">
+          <!-- Columna Izquierda: Selección -->
+          <div class="col-lg-5">
+            <div class="card border-0 shadow-sm mb-4">
+              <div class="card-header bg-white py-3">
+                <h5 class="card-title mb-0 fw-bold fs-6">1. Datos de Emisión</h5>
+              </div>
+              <div class="card-body">
+                <div class="mb-3">
+                  <label class="form-label small fw-semibold">Facturador / Usuario en sesión:</label>
+                  <div class="p-2 bg-light rounded text-dark fw-bold" data-hook="factura-usuario-actual">Cargando...</div>
+                </div>
+
+                <div class="mb-3">
+                  <label for="select-cliente" class="form-label small fw-semibold">Cliente Destinatario *</label>
+                  <select class="form-select" id="select-cliente" data-hook="select-cliente">
+                    <option value="">-- Seleccione un cliente --</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="card border-0 shadow-sm">
+              <div class="card-header bg-white py-3">
+                <h5 class="card-title mb-0 fw-bold fs-6">2. Seleccionar Productos</h5>
+              </div>
+              <div class="card-body">
+                <div class="mb-3">
+                  <label for="select-producto" class="form-label small fw-semibold">Producto del Catálogo *</label>
+                  <select class="form-select" id="select-producto" data-hook="select-producto">
+                    <option value="">-- Seleccione un producto --</option>
+                  </select>
+                </div>
+
+                <div class="mb-3">
+                  <label for="input-cantidad" class="form-label small fw-semibold">Cantidad *</label>
+                  <input type="number" id="input-cantidad" class="form-control" min="1" value="1" data-hook="input-cantidad-producto">
+                </div>
+
+                <button class="btn btn-outline-primary w-100 py-2 fw-semibold" data-hook="btn-agregar-carrito" type="button">
+                  ➕ Agregar al Carrito
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Columna Derecha: Resumen y Carrito -->
+          <div class="col-lg-7">
+            <div class="card border-0 shadow-sm h-100">
+              <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0 fw-bold fs-6">3. Carrito de Compras</h5>
+                <span class="badge bg-secondary">En vivo</span>
+              </div>
+              <div class="card-body d-flex flex-column">
+                <div class="table-responsive flex-grow-1">
+                  <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        <th>Producto</th>
+                        <th class="text-end">Precio Unit.</th>
+                        <th class="text-center" style="width: 80px;">Cant.</th>
+                        <th class="text-end">Subtotal</th>
+                        <th style="width: 60px;" class="text-center">Quitar</th>
+                      </tr>
+                    </thead>
+                    <tbody data-hook="carrito-tabla-body">
+                      <!-- Items del carrito renderizados con template -->
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="border-top pt-3 mt-3">
+                  <div class="d-flex justify-content-between align-items-center mb-3">
+                    <span class="fs-5 fw-bold text-dark">TOTAL FACTURA:</span>
+                    <span class="fs-4 fw-bold text-primary" data-hook="carrito-total">$ 0,00</span>
+                  </div>
+
+                  <button class="btn btn-success btn-lg w-100 py-3 fw-bold" data-hook="btn-generar-factura" type="button">
+                    🧾 Generar Factura
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- 4. VISTA DE HISTORIAL DE FACTURAS          -->
+      <!-- ========================================== -->
+      <section class="tab-pane fade" id="view-historial" role="tabpanel" data-hook="vista-historial">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <div>
+            <h1 class="h3 fw-bold text-dark mb-1">Historial de Facturas Emitidas</h1>
+            <p class="text-muted small mb-0">Registro histórico ordenado por ID descendente</p>
+          </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th style="width: 120px;">Factura Nº</th>
+                  <th>Fecha de Emisión</th>
+                  <th>Cliente</th>
+                  <th class="text-end">Total</th>
+                  <th style="width: 140px;" class="text-end">Acción</th>
+                </tr>
+              </thead>
+              <tbody data-hook="facturas-tabla-body">
+                <!-- Filas renderizadas con template -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- 5. VISTA DE DETALLE DE FACTURA             -->
+      <!-- ========================================== -->
+      <section class="tab-pane fade" id="view-detalle" role="tabpanel" data-hook="vista-detalle">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 no-print">
+          <div>
+            <h1 class="h3 fw-bold text-dark mb-1">Visualización de Factura</h1>
+            <p class="text-muted small mb-0">Detalle formal, exportación a JSON e impresión en PDF</p>
+          </div>
+          <!-- Botones de Acción Obligatorios -->
+          <div class="d-flex flex-wrap gap-2">
+            <button class="btn btn-outline-secondary" data-hook="btn-ver-json" type="button">
+              🔍 Ver JSON
+            </button>
+            <button class="btn btn-outline-primary" data-hook="btn-descargar-json" type="button">
+              📥 Descargar JSON
+            </button>
+            <button class="btn btn-outline-dark" data-hook="btn-imprimir-pdf" type="button">
+              🖨️ Imprimir / Guardar como PDF
+            </button>
+            <button class="btn btn-danger" data-hook="btn-descargar-pdf" type="button">
+              📄 Descargar PDF
+            </button>
+          </div>
+        </div>
+
+        <!-- Caja de Factura Imprimible / Visible -->
+        <div class="factura-box shadow-sm mx-auto" style="max-width: 900px;" data-hook="factura-detalle-vista">
+          <!-- Cabecera de la Factura -->
+          <div class="d-flex justify-content-between align-items-start border-bottom pb-4 mb-4">
+            <div>
+              <h2 class="h4 fw-bold text-primary mb-1">FACTURA DE VENTA</h2>
+              <span class="text-muted small">Sistema de Facturación Microservicios</span>
+            </div>
+            <div class="text-end">
+              <h3 class="h4 fw-bold text-dark mb-1">Nº <span data-hook="detalle-factura-id">---</span></h3>
+              <div class="text-muted small">Fecha: <strong data-hook="detalle-factura-fecha">----/--/--</strong></div>
+            </div>
+          </div>
+
+          <!-- Información Cliente y Facturador -->
+          <div class="row g-4 mb-4">
+            <div class="col-md-6">
+              <div class="p-3 bg-light rounded border">
+                <h6 class="fw-bold text-secondary text-uppercase small mb-2">Datos del Cliente</h6>
+                <div class="fs-6 fw-bold text-dark" data-hook="detalle-cliente-nombre">Seleccione una factura</div>
+                <div class="small text-muted">Cédula: <span data-hook="detalle-cliente-cc">---</span></div>
+                <div class="small text-muted">Email: <span data-hook="detalle-cliente-email">---</span></div>
+                <div class="small text-muted">Dirección: <span data-hook="detalle-cliente-direccion">---</span></div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="p-3 bg-light rounded border">
+                <h6 class="fw-bold text-secondary text-uppercase small mb-2">Atendido Por</h6>
+                <div class="fs-6 fw-bold text-dark" data-hook="detalle-usuario-nombre">---</div>
+                <div class="small text-muted">Rol: <span data-hook="detalle-usuario-rol">---</span></div>
+                <div class="small text-muted">Documento oficial de venta</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tabla de Productos Facturados -->
+          <div class="table-responsive mb-4">
+            <table class="table table-bordered mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Descripción del Producto</th>
+                  <th class="text-center" style="width: 100px;">Cant.</th>
+                  <th class="text-end" style="width: 180px;">Precio Unitario</th>
+                  <th class="text-end" style="width: 180px;">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody data-hook="detalle-productos-body">
+                <!-- Filas de detalle renderizadas dinámicamente -->
+              </tbody>
+              <tfoot>
+                <tr class="table-light">
+                  <th colspan="3" class="text-end fs-5 fw-bold">TOTAL:</th>
+                  <th class="text-end fs-5 fw-bold text-primary" data-hook="detalle-factura-total">$ 0,00</th>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div class="text-center text-muted small pt-3 border-top">
+            Documento electrónico válido. Gracias por su compra.
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ======================================================== -->
+  <!-- TEMPLATES HTML CON DATA-HOOKS PARA COMPATIBILIDAD STITCH -->
+  <!-- ======================================================== -->
+
+  <!-- Template Fila Producto -->
+  <template data-hook="template-producto-fila">
+    <tr>
+      <td class="fw-semibold text-muted" data-hook="item-producto-id"></td>
+      <td class="fw-bold text-dark" data-hook="item-producto-nombre"></td>
+      <td data-hook="item-producto-precio"></td>
+      <td data-hook="item-producto-stock"></td>
+      <td class="text-end">
+        <button class="btn btn-sm btn-outline-secondary me-1" data-hook="btn-editar-producto" type="button">Editar</button>
+        <button class="btn btn-sm btn-outline-danger" data-hook="btn-eliminar-producto" type="button">Eliminar</button>
+      </td>
+    </tr>
+  </template>
+
+  <!-- Template Fila Cliente -->
+  <template data-hook="template-cliente-fila">
+    <tr>
+      <td class="fw-semibold text-muted" data-hook="item-cliente-id"></td>
+      <td class="fw-bold text-dark" data-hook="item-cliente-nombre"></td>
+      <td data-hook="item-cliente-cc"></td>
+      <td data-hook="item-cliente-email"></td>
+      <td data-hook="item-cliente-direccion"></td>
+      <td class="text-end">
+        <button class="btn btn-sm btn-outline-secondary me-1" data-hook="btn-editar-cliente" type="button">Editar</button>
+        <button class="btn btn-sm btn-outline-danger" data-hook="btn-eliminar-cliente" type="button">Eliminar</button>
+      </td>
+    </tr>
+  </template>
+
+  <!-- Template Fila Carrito -->
+  <template data-hook="template-carrito-fila">
+    <tr>
+      <td class="fw-bold text-dark" data-hook="item-carrito-nombre"></td>
+      <td class="text-end" data-hook="item-carrito-precio"></td>
+      <td class="text-center" data-hook="item-carrito-cantidad"></td>
+      <td class="text-end fw-semibold" data-hook="item-carrito-subtotal"></td>
+      <td class="text-center">
+        <button class="btn btn-sm btn-link text-danger p-0" data-hook="btn-quitar-carrito" type="button" title="Quitar">✖</button>
+      </td>
+    </tr>
+  </template>
+
+  <!-- Template Fila Historial Factura -->
+  <template data-hook="template-factura-fila">
+    <tr>
+      <td class="fw-bold text-primary" data-hook="item-factura-id"></td>
+      <td data-hook="item-factura-fecha"></td>
+      <td class="fw-semibold text-dark" data-hook="item-factura-cliente"></td>
+      <td class="text-end fw-bold" data-hook="item-factura-total"></td>
+      <td class="text-end">
+        <button class="btn btn-sm btn-primary" data-hook="btn-ver-factura" type="button">Ver Detalle</button>
+      </td>
+    </tr>
+  </template>
+
+  <!-- Template Fila Detalle Productos en Factura -->
+  <template data-hook="template-detalle-producto-fila">
+    <tr>
+      <td class="fw-semibold" data-hook="item-detalle-prod-nombre"></td>
+      <td class="text-center" data-hook="item-detalle-prod-cantidad"></td>
+      <td class="text-end" data-hook="item-detalle-prod-precio"></td>
+      <td class="text-end fw-bold" data-hook="item-detalle-prod-subtotal"></td>
+    </tr>
+  </template>
+
+  <!-- ========================================== -->
+  <!-- MODALES                                    -->
+  <!-- ========================================== -->
+
+  <!-- Modal Producto (Crear / Editar) -->
+  <div class="modal fade" id="modal-producto" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <form data-hook="producto-form">
+          <div class="modal-header">
+            <h5 class="modal-title fw-bold" data-hook="producto-modal-titulo">Nuevo Producto</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" data-hook="producto-id-input">
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Nombre del Producto *</label>
+              <input type="text" class="form-control" data-hook="producto-nombre-input" required placeholder="Ej: Teclado USB">
+            </div>
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Precio (COP) *</label>
+              <input type="number" step="0.01" min="1" class="form-control" data-hook="producto-precio-input" required placeholder="Ej: 50000">
+            </div>
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Stock Inicial *</label>
+              <input type="number" min="0" class="form-control" data-hook="producto-stock-input" required placeholder="Ej: 10">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary" data-hook="btn-guardar-producto">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Cliente (Crear / Editar) -->
+  <div class="modal fade" id="modal-cliente" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <form data-hook="cliente-form">
+          <div class="modal-header">
+            <h5 class="modal-title fw-bold" data-hook="cliente-modal-titulo">Nuevo Cliente</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" data-hook="cliente-id-input">
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Nombre Completo *</label>
+              <input type="text" class="form-control" data-hook="cliente-nombre-input" required placeholder="Ej: María Rodríguez">
+            </div>
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Cédula (CC numérica) *</label>
+              <input type="text" class="form-control" data-hook="cliente-cc-input" required placeholder="Ej: 10203040">
+            </div>
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Correo Electrónico *</label>
+              <input type="email" class="form-control" data-hook="cliente-email-input" required placeholder="Ej: maria@ejemplo.com">
+            </div>
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Dirección de Envío *</label>
+              <input type="text" class="form-control" data-hook="cliente-direccion-input" required placeholder="Ej: Av. Principal #10-20">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary" data-hook="btn-guardar-cliente">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Ver JSON Formateado -->
+  <div class="modal fade" id="modal-ver-json" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title fw-bold">Estructura JSON de la Factura</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <pre class="pre-json m-0" data-hook="modal-json-pre">Cargando...</pre>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" data-hook="btn-copiar-json">📋 Copiar al Portapapeles</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap 5 JS Bundle CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <!-- Script principal de inicialización de la aplicación -->
+  <script type="module">
+    import { initAppSession } from './js/auth.js';
+    import { initProductos } from './js/productos.js';
+    import { initClientes } from './js/clientes.js';
+    import { initFacturas, poblarSelectoresNuevaFactura, cargarHistorialFacturas } from './js/facturas.js';
+    import { getByHook } from './js/ui.js';
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const usuario = initAppSession();
+      if (!usuario) return;
+
+      initProductos();
+      initClientes();
+      initFacturas();
+
+      // Recargar datos al cambiar de pestaña
+      const tabNuevaFactura = getByHook('nav-tab-nueva-factura');
+      if (tabNuevaFactura) {
+        tabNuevaFactura.addEventListener('shown.bs.tab', () => {
+          poblarSelectoresNuevaFactura();
+        });
+      }
+
+      const tabHistorial = getByHook('nav-tab-historial');
+      if (tabHistorial) {
+        tabHistorial.addEventListener('shown.bs.tab', () => {
+          cargarHistorialFacturas();
+        });
+      }
+    });
+  </script>
+</body>
+</html>
