@@ -31,33 +31,17 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /clientes", h.handleCreate)
 	mux.HandleFunc("PUT /clientes/{id}", h.handleUpdate)
 	mux.HandleFunc("DELETE /clientes/{id}", h.handleDelete)
-	mux.HandleFunc("GET /health", h.handleHealth)
 }
 
-// handleList maneja GET /clientes con filtro opcional ?q= por nombre o cc.
+// handleList maneja GET /clientes.
 func (h *Handler) handleList(w http.ResponseWriter, r *http.Request) {
-	query := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("q")))
-
-	if query == "" {
-		items, err := h.store.GetAll()
-		if err != nil {
-			httpx.RespondError(w, http.StatusInternalServerError, "Error interno del servidor")
-			return
-		}
-		if items == nil {
-			items = []Cliente{}
-		}
-		httpx.RespondJSON(w, http.StatusOK, items)
-		return
-	}
-
-	items, err := h.store.Filter(func(c *Cliente) bool {
-		return strings.Contains(strings.ToLower(c.Nombre), query) ||
-			strings.Contains(c.CC, query)
-	})
+	items, err := h.store.GetAll()
 	if err != nil {
 		httpx.RespondError(w, http.StatusInternalServerError, "Error interno del servidor")
 		return
+	}
+	if items == nil {
+		items = []Cliente{}
 	}
 	httpx.RespondJSON(w, http.StatusOK, items)
 }
@@ -248,12 +232,4 @@ func (h *Handler) handleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpx.RespondNoContent(w)
-}
-
-// handleHealth maneja GET /health.
-func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
-	httpx.RespondJSON(w, http.StatusOK, map[string]string{
-		"status":   "ok",
-		"servicio": "clientes",
-	})
 }

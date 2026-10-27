@@ -10,7 +10,6 @@ import (
 )
 
 // Store es un almacén genérico que lee y escribe un arreglo de objetos JSON.
-// T debe ser un tipo struct con un campo ID int para la generación de IDs.
 type Store[T any] struct {
 	mu       sync.RWMutex
 	filePath string
@@ -20,8 +19,6 @@ type Store[T any] struct {
 }
 
 // New crea un nuevo Store. Si el archivo no existe, lo crea con un arreglo vacío [].
-// getID y setID son funciones para leer y escribir el campo ID de cada elemento.
-// startID es el ID inicial para elementos nuevos (los datos semilla usan IDs menores).
 func New[T any](filePath string, startID int, getID func(*T) int, setID func(*T, int)) (*Store[T], error) {
 	s := &Store[T]{
 		filePath: filePath,
@@ -30,19 +27,16 @@ func New[T any](filePath string, startID int, getID func(*T) int, setID func(*T,
 		setID:    setID,
 	}
 
-	// Crear directorio si no existe
 	dir := filepath.Dir(filePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("error creando directorio %s: %w", dir, err)
 	}
 
-	// Si el archivo no existe, crearlo con arreglo vacío
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		if err := s.writeFile([]T{}); err != nil {
 			return nil, fmt.Errorf("error creando archivo %s: %w", filePath, err)
 		}
 	} else {
-		// Leer datos existentes para calcular el próximo ID
 		items, err := s.readFile()
 		if err != nil {
 			return nil, fmt.Errorf("error leyendo archivo %s: %w", filePath, err)
@@ -74,14 +68,12 @@ func (s *Store[T]) readFile() ([]T, error) {
 }
 
 // writeFile escribe el arreglo al archivo JSON de forma atómica.
-// Escribe primero a un archivo temporal y luego lo renombra.
 func (s *Store[T]) writeFile(items []T) error {
 	data, err := json.MarshalIndent(items, "", "  ")
 	if err != nil {
 		return fmt.Errorf("error codificando JSON: %w", err)
 	}
 
-	// Escribir a archivo temporal en el mismo directorio
 	dir := filepath.Dir(s.filePath)
 	tmpFile, err := os.CreateTemp(dir, "tmp-*.json")
 	if err != nil {
@@ -100,7 +92,6 @@ func (s *Store[T]) writeFile(items []T) error {
 		return fmt.Errorf("error cerrando archivo temporal: %w", err)
 	}
 
-	// Renombrar atómicamente
 	if err := os.Rename(tmpPath, s.filePath); err != nil {
 		os.Remove(tmpPath)
 		return fmt.Errorf("error renombrando archivo: %w", err)
@@ -151,7 +142,7 @@ func (s *Store[T]) Create(item T) (T, error) {
 	items = append(items, item)
 
 	if err := s.writeFile(items); err != nil {
-		s.nextID-- // Revertir el incremento si falla la escritura
+		s.nextID--
 		return item, err
 	}
 
@@ -232,66 +223,4 @@ func (s *Store[T]) FindOne(predicate func(*T) bool) (*T, error) {
 	}
 
 	return nil, nil
-}
-
-// Filter retorna todos los elementos que cumplen el predicado.
-func (s *Store[T]) Filter(predicate func(*T) bool) ([]T, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	items, err := s.readFile()
-	if err != nil {
-		return nil, err
-	}
-
-	var result []T
-	for i := range items {
-		if predicate(&items[i]) {
-			result = append(result, items[i])
-		}
-	}
-
-	if result == nil {
-		result = []T{}
-	}
-
-	return result, nil
-}
-
-// WithLock ejecuta una función con el lock de escritura tomado.
-// Útil para operaciones atómicas de lectura-modificación-escritura complejas.
-func (s *Store[T]) WithLock(fn func(items []T) ([]T, error)) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	items, err := s.readFile()
-	if err != nil {
-		return err
-	}
-
-	items, err = fn(items)
-	if err != nil {
-		return err
-	}
-
-	return s.writeFile(items)
-}
-
-// CreateWithID agrega un elemento con un ID específico (para datos semilla).
-func (s *Store[T]) CreateWithID(item T) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	items, err := s.readFile()
-	if err != nil {
-		return err
-	}
-
-	id := s.getID(&item)
-	if id >= s.nextID {
-		s.nextID = id + 1
-	}
-
-	items = append(items, item)
-	return s.writeFile(items)
 }

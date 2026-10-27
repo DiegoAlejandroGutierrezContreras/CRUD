@@ -1,5 +1,5 @@
 // Servicio de Productos - Puerto 8082
-// Gestiona el CRUD de productos con precios y control de stock.
+// Gestiona el CRUD de productos con precios y stock.
 package main
 
 import (
@@ -36,17 +36,9 @@ func main() {
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
 
-	// Rutas protegidas por JWT excepto /health
-	protectedMux := http.NewServeMux()
+	// Rutas protegidas por JWT con soporte CORS
 	jwtMiddleware := middleware.RequireJWT(jwtSecret)
-	protectedMux.Handle("GET /health", mux)
-	protectedMux.Handle("/", jwtMiddleware(mux))
-
-	finalHandler := middleware.Chain(protectedMux,
-		middleware.CORS,
-		middleware.Logging,
-		middleware.Recover,
-	)
+	finalHandler := middleware.CORS(jwtMiddleware(mux))
 
 	server := &http.Server{
 		Addr:         ":" + port,

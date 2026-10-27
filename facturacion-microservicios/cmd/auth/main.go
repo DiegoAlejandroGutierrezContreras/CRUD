@@ -36,12 +36,8 @@ func main() {
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
 
-	// Aplicar middlewares
-	finalHandler := middleware.Chain(mux,
-		middleware.CORS,
-		middleware.Logging,
-		middleware.Recover,
-	)
+	// Aplicar solo CORS
+	finalHandler := middleware.CORS(mux)
 
 	server := &http.Server{
 		Addr:         ":" + port,

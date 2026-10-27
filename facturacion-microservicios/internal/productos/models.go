@@ -22,8 +22,3 @@ type UpdateRequest struct {
 	Precio float64 `json:"precio"`
 	Stock  int     `json:"stock"`
 }
-
-// StockDelta es el body de PATCH /productos/{id}/stock.
-type StockDelta struct {
-	Delta int `json:"delta"`
-}

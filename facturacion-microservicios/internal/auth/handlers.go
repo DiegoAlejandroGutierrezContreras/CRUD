@@ -35,7 +35,6 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /auth/register", h.handleRegister)
 	mux.HandleFunc("POST /auth/login", h.handleLogin)
 	mux.HandleFunc("GET /auth/me", h.handleMe)
-	mux.HandleFunc("GET /health", h.handleHealth)
 }
 
 // handleRegister maneja POST /auth/register.
@@ -89,7 +88,7 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 		Nombre:   req.Nombre,
 		Email:    req.Email,
 		Password: string(hashedPassword),
-		Rol:      "cliente", // Siempre se asigna como "cliente"
+		Rol:      "cliente",
 	}
 
 	usuario, err = h.store.Create(usuario)
@@ -129,16 +128,10 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Comparar contraseña con bcrypt (y soporte para literales de prueba)
+	// Validar exclusivamente con hash bcrypt (sin puertas traseras)
 	if err := bcrypt.CompareHashAndPassword([]byte(usuario.Password), []byte(req.Password)); err != nil {
-		if (usuario.Email == "ricardo@example.com" && req.Password == "admin123") ||
-			(usuario.Email == "maria@example.com" && req.Password == "cliente123") ||
-			usuario.Password == req.Password {
-			// Credenciales de prueba aceptadas
-		} else {
-			httpx.RespondError(w, http.StatusUnauthorized, "Credenciales incorrectas")
-			return
-		}
+		httpx.RespondError(w, http.StatusUnauthorized, "Credenciales incorrectas")
+		return
 	}
 
 	// Generar token JWT
@@ -156,14 +149,13 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 // handleMe maneja GET /auth/me.
 func (h *Handler) handleMe(w http.ResponseWriter, r *http.Request) {
-	// Validar token JWT manualmente
+	// Validar token JWT
 	claims, err := h.extractClaims(r)
 	if err != nil {
 		httpx.RespondError(w, http.StatusUnauthorized, "Token inválido o expirado")
 		return
 	}
 
-	// Buscar usuario en la base de datos para retornar datos actualizados
 	userID, err := strconv.Atoi(claims.Subject)
 	if err != nil {
 		httpx.RespondError(w, http.StatusUnauthorized, "Token inválido")
@@ -181,14 +173,6 @@ func (h *Handler) handleMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpx.RespondJSON(w, http.StatusOK, usuario.SinPassword())
-}
-
-// handleHealth maneja GET /health.
-func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
-	httpx.RespondJSON(w, http.StatusOK, map[string]string{
-		"status":   "ok",
-		"servicio": "autenticacion",
-	})
 }
 
 // generateToken genera un token JWT para un usuario.

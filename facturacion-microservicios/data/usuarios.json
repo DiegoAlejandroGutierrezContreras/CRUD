@@ -12,12 +12,5 @@
     "email": "maria@example.com",
     "password": "$2a$10$5cC9PsHwnqkf6D0kqKqzduIpAUplQt26l.JJKMMblCuCcnGg.fhvW",
     "rol": "cliente"
-  },
-  {
-    "id": 3,
-    "nombre": "Diego G",
-    "email": "diego@gmail.com",
-    "password": "$2a$10$rHp487ohVYF6Kkvrk5rfT.uwK0dwBIAqS8SZmjgORQyzUJPvZwtSm",
-    "rol": "cliente"
   }
 ]

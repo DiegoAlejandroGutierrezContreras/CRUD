@@ -55,29 +55,20 @@ Write-Host "==========================================================" -Foregro
 Write-Host "Levantando Sistema de Facturacion Digital Microservicios" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 
-$logsDir = Join-Path $scriptDir "logs"
-if (-not (Test-Path $logsDir)) {
-    New-Item -ItemType Directory -Path $logsDir | Out-Null
+$binDir = Join-Path $scriptDir "bin"
+if (-not (Test-Path $binDir)) {
+    New-Item -ItemType Directory -Path $binDir -Force | Out-Null
 }
 
-$binDir = Join-Path $scriptDir "bin"
-if (-not (Test-Path (Join-Path $binDir "auth.exe"))) {
-    Write-Host "Compilando binarios de microservicios..." -ForegroundColor Yellow
-    New-Item -ItemType Directory -Path $binDir -Force | Out-Null
-    & go build -o (Join-Path $binDir "auth.exe") cmd/auth/main.go
-    & go build -o (Join-Path $binDir "productos.exe") cmd/productos/main.go
-    & go build -o (Join-Path $binDir "clientes.exe") cmd/clientes/main.go
-    & go build -o (Join-Path $binDir "facturacion.exe") cmd/facturacion/main.go
-    & go build -o (Join-Path $binDir "web.exe") cmd/web/main.go
-}
+Write-Host "Compilando binarios de microservicios..." -ForegroundColor Yellow
+& go build -o (Join-Path $binDir "auth.exe") cmd/auth/main.go
+& go build -o (Join-Path $binDir "productos.exe") cmd/productos/main.go
+& go build -o (Join-Path $binDir "clientes.exe") cmd/clientes/main.go
+& go build -o (Join-Path $binDir "facturacion.exe") cmd/facturacion/main.go
+& go build -o (Join-Path $binDir "web.exe") cmd/web/main.go
 
 function Start-DaemonProcess($name, $exePath, $port) {
-    $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = $exePath
-    $psi.WorkingDirectory = $scriptDir
-    $psi.UseShellExecute = $false
-    $psi.CreateNoWindow = $true
-    $p = [System.Diagnostics.Process]::Start($psi)
+    $p = Start-Process -FilePath $exePath -WorkingDirectory $scriptDir -WindowStyle Hidden -PassThru
     Write-Host "Servicio $name iniciado (PID: $($p.Id)) en http://localhost:$port" -ForegroundColor Green
     return [PSCustomObject]@{
         Name = $name

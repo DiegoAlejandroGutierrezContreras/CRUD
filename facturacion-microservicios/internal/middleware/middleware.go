@@ -1,13 +1,11 @@
-// Package middleware provee middlewares HTTP comunes: CORS, logging, JWT y recover.
+// Package middleware provee middlewares HTTP necesarios: CORS y validación JWT.
 package middleware
 
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
-	"time"
 
 	"facturacion-microservicios/internal/httpx"
 
@@ -34,7 +32,7 @@ type JWTClaims struct {
 func CORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 		w.Header().Set("Access-Control-Max-Age", "86400")
 
@@ -43,42 +41,6 @@ func CORS(next http.Handler) http.Handler {
 			return
 		}
 
-		next.ServeHTTP(w, r)
-	})
-}
-
-// Logging registra cada request con método, ruta, status y duración.
-func Logging(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
-
-		next.ServeHTTP(sw, r)
-
-		log.Printf("%s %s → %d (%s)", r.Method, r.URL.Path, sw.status, time.Since(start).Round(time.Millisecond))
-	})
-}
-
-// statusWriter es un wrapper de ResponseWriter que captura el código de estado.
-type statusWriter struct {
-	http.ResponseWriter
-	status int
-}
-
-func (sw *statusWriter) WriteHeader(code int) {
-	sw.status = code
-	sw.ResponseWriter.WriteHeader(code)
-}
-
-// Recover recupera panics en handlers y responde con error 500.
-func Recover(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer func() {
-			if rec := recover(); rec != nil {
-				log.Printf("PANIC recuperado: %v", rec)
-				httpx.RespondError(w, http.StatusInternalServerError, "Error interno del servidor")
-			}
-		}()
 		next.ServeHTTP(w, r)
 	})
 }

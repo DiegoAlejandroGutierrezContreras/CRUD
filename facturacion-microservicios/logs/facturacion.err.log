@@ -1,6 +1,0 @@
-2026/10/25 23:08:52 🧾 Servicio de Facturación iniciando en puerto 8084
-2026/10/25 23:08:52    Archivo de datos: data/facturas.json
-2026/10/25 23:08:52    Auth URL: http://localhost:8081
-2026/10/25 23:08:52    Productos URL: http://localhost:8082
-2026/10/25 23:08:52    Clientes URL: http://localhost:8083
-2026/10/25 23:08:52 🧾 Servicio de Facturación escuchando en http://localhost:8084

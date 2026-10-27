@@ -1,265 +1,123 @@
-# Documento Técnico: Sistema de Facturación Digital con Microservicios
+# Documento Técnico: Proyecto de Programación Avanzada 2026_2
 
-**Asignatura:** Programación Avanzada 2026_2  
-**Fecha:** Octubre 2026  
-**Lenguajes y Tecnologías:** Go 1.22+, Vanilla JavaScript (ES Modules), Bootstrap 5, jsPDF, REST/JSON.
-
----
-
-## 1. Introducción y Objetivo
-
-El presente proyecto implementa un **Sistema de Facturación Digital** basado en una **arquitectura orientada a microservicios** independientes. El sistema permite administrar usuarios, catálogo de productos con control de existencias en tiempo real, registro de clientes y la emisión, consulta y exportación de facturas de venta oficiales.
-
-### Objetivos Principales:
-- Diseñar e implementar microservicios desacoplados en Go utilizando exclusivamente la librería estándar `net/http` con el enrutador nativo de Go 1.22 (`ServeMux`).
-- Garantizar la persistencia de datos segura y concurrente sobre archivos JSON atómicos (`sync.RWMutex` + reemplazo atómico de archivo temporal).
-- Centralizar la seguridad con tokens JWT (`HS256`) y encriptación de contraseñas mediante `bcrypt`.
-- Implementar un microservicio de orquestación transaccional (Facturación) capaz de validar clientes, sincronizar productos, aplicar control de concurrencia en stock y ejecutar compensación ante fallas (patrón Saga básico).
-- Proveer un frontend desacoplado (HTML semántico + JavaScript Vanilla) preparado para adopción de diseño con Google Stitch mediante el contrato de selectores `data-hook`.
+**Integrantes:**
+- [INTEGRANTE 1]
+- [INTEGRANTE 2]
 
 ---
 
-## 2. Arquitectura del Sistema
+## (a) Arquitectura del Sistema
 
-El ecosistema está integrado por 5 binarios independientes:
-1. **Servicio de Autenticación** (`:8081`): Emisión y validación de tokens JWT, registro y hash bcrypt.
-2. **Servicio de Productos** (`:8082`): CRUD de catálogo y actualización atómica de existencias.
-3. **Servicio de Clientes** (`:8083`): CRUD de clientes y validación de unicidad de cédula/correo.
-4. **Servicio de Facturación** (`:8084`): Consumidor y orquestador transaccional que consolida ventas.
-5. **Servidor Web Estático** (`:3000`): Servidor HTTP en Go para el frontend.
+El sistema implementa una arquitectura orientada a microservicios independientes desarrollada en Go utilizando exclusivamente la biblioteca estándar `net/http` para la comunicación REST y archivos JSON como almacén de base de datos persistente.
 
-### Diagrama General de Arquitectura (Mermaid)
+### Componentes:
+1. **Frontend (JavaScript / HTML):** Interfaz desacoplada que corre sobre un servidor web estático (`:3000`), encargada de la autenticación del usuario, catálogo/selección de productos, formulario para registrar clientes, generación de facturas y visualización de la factura con opción de impresión en PDF.
+2. **Servicio 1 - Autenticación (`:8081`):** Microservicio para registro y login de usuarios con JWT (`HS256`) y contraseñas cifradas con `bcrypt`. Consulta y persiste en `data/usuarios.json`.
+3. **Servicio 2 - Productos (`:8082`):** Microservicio para operaciones CRUD de catálogo de productos (precios y stock). Rutas protegidas por JWT. Persiste en `data/productos.json`.
+4. **Servicio 3 - Clientes (`:8083`):** Microservicio para operaciones CRUD de clientes (nombre, cédula cc, correo, dirección). Rutas protegidas por JWT. Persiste en `data/clientes.json`.
+5. **Servicio de Facturación (`:8084`):** Microservicio orquestador que consume a los tres microservicios anteriores para generar facturas. Persiste en `data/facturas.json`.
+
+### Diagrama de Arquitectura
 
 ```mermaid
 graph TD
-    subgraph Cliente ["Capa de Presentación"]
-        Browser["Navegador Web (Frontend JS / Bootstrap 5 / jsPDF)"]
-        WebServer["cmd/web (Servidor Estático :3000)"]
+    subgraph Frontend ["Frontend Web (:3000)"]
+        UI["Interfaz Web (HTML + JavaScript)"]
     end
 
-    subgraph Microservicios ["Capa de Negocio (Go net/http)"]
-        AuthSvc["Auth Service (:8081)"]
-        ProdSvc["Productos Service (:8082)"]
-        CliSvc["Clientes Service (:8083)"]
-        FactSvc["Facturación Service (:8084)"]
+    subgraph Microservicios ["Capa de Microservicios (Go net/http)"]
+        AuthSvc["Servicio 1: Autenticación (:8081)"]
+        ProdSvc["Servicio 2: Productos (:8082)"]
+        CliSvc["Servicio 3: Clientes (:8083)"]
+        FactSvc["Servicio de Facturación (:8084)"]
     end
 
-    subgraph Persistencia ["Capa de Persistencia (Almacén JSON Atómico)"]
+    subgraph BaseDeDatos ["Base de Datos (Archivos JSON)"]
         DBUsers[("data/usuarios.json")]
         DBProd[("data/productos.json")]
         DBCli[("data/clientes.json")]
         DBFact[("data/facturas.json")]
     end
 
-    Browser -->|Descarga UI| WebServer
-    Browser -->|POST /auth/login, /register| AuthSvc
-    Browser -->|GET, POST, PUT, DELETE /productos| ProdSvc
-    Browser -->|GET, POST, PUT, DELETE /clientes| CliSvc
-    Browser -->|GET, POST /facturas| FactSvc
+    UI -->|POST /auth/login, /register| AuthSvc
+    UI -->|GET /productos| ProdSvc
+    UI -->|GET, POST /clientes| CliSvc
+    UI -->|POST /facturas| FactSvc
 
-    FactSvc -->|GET /auth/me| AuthSvc
-    FactSvc -->|GET /clientes/{id}| CliSvc
-    FactSvc -->|GET /productos/{id}| ProdSvc
-    FactSvc -->|PATCH /productos/{id}/stock| ProdSvc
+    FactSvc -->|1. GET /auth/me| AuthSvc
+    FactSvc -->|2. GET /clientes/{id}| CliSvc
+    FactSvc -->|3. GET /productos/{id}| ProdSvc
 
-    AuthSvc -.-> DBUsers
-    ProdSvc -.-> DBProd
-    CliSvc -.-> DBCli
-    FactSvc -.-> DBFact
+    AuthSvc <-->|Lectura / Escritura| DBUsers
+    ProdSvc <-->|Lectura / Escritura| DBProd
+    CliSvc <-->|Lectura / Escritura| DBCli
+    FactSvc <-->|Lectura / Escritura| DBFact
 ```
 
 ---
 
-## 3. Catálogo Completo de Endpoints
+## (b) Endpoints por Servicio y Flujos
 
-### 3.1. Servicio de Autenticación (`puerto 8081`)
+### 1. Endpoints Reales del Sistema
 
-| Método | Ruta | Autenticación | Body (Request) | Respuestas | Códigos |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `POST` | `/auth/register` | Pública | `{"nombre":"...","email":"...","password":"..."}` | `{"id":3,"nombre":"...","email":"...","rol":"cliente"}` | `201`, `400`, `409`, `500` |
-| `POST` | `/auth/login` | Pública | `{"email":"...","password":"..."}` | `{"token":"ey...","usuario":{...}}` | `200`, `400`, `401`, `500` |
-| `GET` | `/auth/me` | Bearer JWT | *Ninguno* | `{"id":1,"nombre":"...","email":"...","rol":"admin"}` | `200`, `401`, `404`, `500` |
-| `GET` | `/health` | Pública | *Ninguno* | `{"status":"ok","servicio":"autenticacion"}` | `200` |
+#### Servicio de Autenticación (`puerto 8081`)
+- `POST /auth/register`: Registra un usuario nuevo (`nombre`, `email`, `password`). Genera hash con `bcrypt` y persiste con rol `"cliente"`.
+- `POST /auth/login`: Recibe credenciales (`email`, `password`), valida el hash contra `data/usuarios.json` mediante `bcrypt.CompareHashAndPassword` y genera token JWT.
+- `GET /auth/me`: Requiere header `Authorization: Bearer <token>`, valida el JWT y retorna los datos del usuario autenticado (`id`, `nombre`, `email`, `rol`).
 
-#### Ejemplo Request/Response - Login:
-```http
-POST /auth/login HTTP/1.1
-Content-Type: application/json
+#### Servicio de Productos (`puerto 8082` - Protegido por JWT)
+- `GET /productos`: Obtiene la lista completa de productos disponibles.
+- `GET /productos/{id}`: Obtiene el detalle de un producto por su identificador.
+- `POST /productos`: Crea un nuevo producto (`nombre`, `precio`, `stock`).
+- `PUT /productos/{id}`: Actualiza un producto existente (`nombre`, `precio`, `stock`).
+- `DELETE /productos/{id}`: Elimina un producto por su identificador.
 
-{
-  "email": "ricardo@example.com",
-  "password": "admin123"
-}
-```
-```http
-HTTP/1.1 200 OK
-Content-Type: application/json; charset=utf-8
+#### Servicio de Clientes (`puerto 8083` - Protegido por JWT)
+- `GET /clientes`: Obtiene la lista completa de clientes registrados.
+- `GET /clientes/{id}`: Obtiene el detalle de un cliente por su identificador.
+- `POST /clientes`: Registra un nuevo cliente (`nombre`, `cc`, `email`, `direccion`). Valida formato y unicidad de cédula y correo.
+- `PUT /clientes/{id}`: Actualiza los datos de un cliente existente (`nombre`, `cc`, `email`, `direccion`).
+- `DELETE /clientes/{id}`: Elimina un cliente por su identificador.
 
-{
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "usuario": {
-    "id": 1,
-    "nombre": "Ricardo Gómez",
-    "email": "ricardo@example.com",
-    "rol": "admin"
-  }
-}
-```
+#### Servicio de Facturación (`puerto 8084`)
+- `POST /facturas`: Endpoint único. Recibe `cliente_id` y lista de `items` (`producto_id` y `cantidad`). Consume los servicios de Auth, Clientes y Productos, calcula subtotales y total, asigna `factura_id` autoincremental y `fecha` actual, guarda en `data/facturas.json` y retorna el JSON de la factura.
 
 ---
 
-### 3.2. Servicio de Productos (`puerto 8082`)
+### 2. Flujos del Sistema
 
-| Método | Ruta | Autenticación | Body (Request) | Respuestas | Códigos |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/productos` | Bearer JWT | *Ninguno (opcional `?q=`)* | `[{"id":101,"nombre":"...","precio":3500000,"stock":15},...]` | `200`, `401`, `500` |
-| `GET` | `/productos/{id}`| Bearer JWT | *Ninguno* | `{"id":101,"nombre":"...","precio":3500000,"stock":15}` | `200`, `401`, `404`, `500` |
-| `POST` | `/productos` | Bearer JWT | `{"nombre":"...","precio":12000,"stock":50}` | `{"id":104,"nombre":"...","precio":12000,"stock":50}` | `201`, `400`, `401`, `500` |
-| `PUT` | `/productos/{id}`| Bearer JWT | `{"nombre":"...","precio":15000,"stock":45}` | `{"id":104,"nombre":"...","precio":15000,"stock":45}` | `200`, `400`, `401`, `404` |
-| `DELETE`| `/productos/{id}`| Bearer JWT | *Ninguno* | *Sin contenido* | `204`, `401`, `404`, `500` |
-| `PATCH`| `/productos/{id}/stock`| Bearer JWT | `{"delta": -2}` | `{"id":101,"nombre":"...","precio":3500000,"stock":13}` | `200`, `400`, `401`, `404`, `422` |
-| `GET` | `/health` | Pública | *Ninguno* | `{"status":"ok","servicio":"productos"}` | `200` |
+#### Flujo 1: Autenticación de Usuario (Registro y Login)
+1. El usuario envía `POST /auth/register` con su nombre, correo y contraseña. El servicio valida formato, comprueba que el correo no exista, cifra la contraseña con `bcrypt` y guarda el registro en `data/usuarios.json`.
+2. El usuario envía `POST /auth/login` con correo y contraseña. El servicio busca el usuario en `data/usuarios.json`, verifica el hash con `bcrypt.CompareHashAndPassword` y, si es correcto, genera y responde con el token JWT (`HS256`) y los datos del usuario.
+3. El frontend almacena el token JWT en `localStorage` para incluirlo en la cabecera `Authorization: Bearer <token>` de las solicitudes subsiguientes.
 
----
+#### Flujo 2: Operaciones CRUD (Productos y Clientes)
+1. **Productos:** Las operaciones `POST`, `GET`, `PUT`, `DELETE` sobre `/productos` son atendidas directamente por el microservicio en el puerto `8082` previa validación del token JWT mediante middleware. Las modificaciones actualizan el archivo `data/productos.json`.
+2. **Clientes:** Las operaciones `POST`, `GET`, `PUT`, `DELETE` sobre `/clientes` son atendidas por el microservicio en el puerto `8083` previa validación del token JWT mediante middleware. El frontend permite registrar clientes mediante el formulario web. Las modificaciones actualizan `data/clientes.json`.
 
-### 3.3. Servicio de Clientes (`puerto 8083`)
-
-| Método | Ruta | Autenticación | Body (Request) | Respuestas | Códigos |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/clientes` | Bearer JWT | *Ninguno (opcional `?q=`)* | `[{"id":201,"nombre":"...","cc":"123","email":"...","direccion":"..."},...]` | `200`, `401`, `500` |
-| `GET` | `/clientes/{id}` | Bearer JWT | *Ninguno* | `{"id":201,"nombre":"...","cc":"123","email":"...","direccion":"..."}` | `200`, `401`, `404`, `500` |
-| `POST` | `/clientes` | Bearer JWT | `{"nombre":"...","cc":"102030","email":"...","direccion":"..."}` | Objeto creado | `201`, `400`, `401`, `409` |
-| `PUT` | `/clientes/{id}` | Bearer JWT | `{"nombre":"...","cc":"102030","email":"...","direccion":"..."}` | Objeto actualizado | `200`, `400`, `401`, `404`, `409` |
-| `DELETE`| `/clientes/{id}` | Bearer JWT | *Ninguno* | *Sin contenido* | `204`, `401`, `404`, `500` |
-| `GET` | `/health` | Pública | *Ninguno* | `{"status":"ok","servicio":"clientes"}` | `200` |
-
----
-
-### 3.4. Servicio de Facturación (`puerto 8084`)
-
-| Método | Ruta | Autenticación | Body (Request) | Respuestas | Códigos |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `POST` | `/facturas` | Bearer JWT | `{"cliente_id":201,"items":[{"producto_id":101,"cantidad":1}]}` | Objeto Factura oficial | `201`, `400`, `401`, `404`, `422`, `502` |
-| `GET` | `/facturas` | Bearer JWT | *Ninguno* | `[{"factura_id":5002,...},{"factura_id":5001,...}]` (descendente) | `200`, `401`, `500`, `502` |
-| `GET` | `/facturas/{id}` | Bearer JWT | *Ninguno* | Objeto Factura oficial | `200`, `401`, `404`, `500` |
-| `GET` | `/facturas/{id}/descargar`| Bearer JWT | *Ninguno* | Archivo adjunto `factura-{id}.json` | `200`, `401`, `404`, `500` |
-| `GET` | `/health` | Pública | *Ninguno* | `{"status":"ok","servicio":"facturacion"}` | `200` |
+#### Flujo 3: Generación de Factura
+1. **Petición del Cliente:** El usuario selecciona en el frontend un cliente destinatario y agrega productos con sus cantidades deseadas al carrito. Hace clic en "Generar Factura", enviando `POST /facturas` al servicio de Facturación con el token JWT en la cabecera y el cuerpo:
+   ```json
+   {
+     "cliente_id": 201,
+     "items": [
+       { "producto_id": 101, "cantidad": 1 },
+       { "producto_id": 102, "cantidad": 2 }
+     ]
+   }
+   ```
+2. **Consumo de Auth:** Facturación realiza una petición `GET /auth/me` con el token JWT hacia el servicio de Autenticación (`:8081`) para verificar validez y obtener el usuario autenticado (`id`, `nombre`, `rol`).
+3. **Consumo de Clientes:** Facturación realiza `GET /clientes/{cliente_id}` hacia el servicio de Clientes (`:8083`) para obtener los datos del cliente (`id`, `nombre`, `email`).
+4. **Consumo de Productos:** Por cada item en el pedido, Facturación realiza `GET /productos/{producto_id}` hacia el servicio de Productos (`:8082`) para obtener el nombre oficial y precio unitario vigente.
+5. **Cálculo y Consolidación:** Facturación calcula los subtotales (`cantidad * precio_unitario`) y la sumatoria total, asigna el identificador secuencial `factura_id` y la `fecha` en formato `YYYY-MM-DD`.
+6. **Persistencia y Respuesta:** La factura completa se almacena de forma concurrente y atómica en `data/facturas.json` y se retorna con código HTTP `201 Created` al frontend en formato JSON.
+7. **Visualización e Impresión:** El frontend renderiza la factura con sus datos formales y permite al usuario imprimirla o guardarla en PDF con las reglas `@media print` de `window.print()`.
 
 ---
 
-## 4. Flujos del Sistema con Diagramas de Secuencia
+## (c) Ejemplo de Factura con Esquema Exacto
 
-### 4.1. Flujo de Autenticación (Login con JWT)
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Usuario
-    participant Frontend as Frontend JS
-    participant Auth as Servicio de Autenticación (:8081)
-    participant DB as data/usuarios.json
-
-    Usuario->>Frontend: Ingresa correo y contraseña
-    Frontend->>Auth: POST /auth/login {email, password}
-    Auth->>DB: Buscar usuario por email (Store.FindOne)
-    DB-->>Auth: Retorna usuario con hash bcrypt
-    Auth->>Auth: bcrypt.CompareHashAndPassword(hash, plain)
-    alt Contraseña incorrecta o usuario inexistente
-        Auth-->>Frontend: 401 Unauthorized {"error":"Credenciales incorrectas"}
-        Frontend-->>Usuario: Muestra toast de error
-    else Credenciales válidas
-        Auth->>Auth: Generar token JWT HS256 (sub, nombre, email, rol, exp: 8h)
-        Auth-->>Frontend: 200 OK {token, usuario}
-        Frontend->>Frontend: Almacena token en localStorage
-        Frontend-->>Usuario: Redirige a app.html
-    end
-```
-
-### 4.2. Flujo de CRUD de Productos / Clientes
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Operador
-    participant Frontend as Frontend JS
-    participant Svc as Servicio Productos (:8082)
-    participant DB as data/productos.json
-
-    Operador->>Frontend: Clic en "+ Nuevo Producto"
-    Frontend->>Operador: Despliega modal
-    Operador->>Frontend: Diligencia {nombre, precio, stock} y Guarda
-    Frontend->>Svc: POST /productos (Header Authorization: Bearer <token>)
-    Svc->>Svc: Middleware RequireJWT verifica firma y expiración
-    alt Token inválido
-        Svc-->>Frontend: 401 Unauthorized
-        Frontend->>Frontend: Limpia sesión y redirige al login
-    else Token válido
-        Svc->>Svc: Validar {nombre no vacío, precio > 0, stock >= 0}
-        Svc->>DB: Store.Create() con RWMutex Lock
-        DB->>DB: Escribe a archivo temporal y renombra atómicamente
-        DB-->>Svc: Retorna producto con ID autoincremental
-        Svc-->>Frontend: 201 Created {id: 104, ...}
-        Frontend->>Frontend: Actualiza tabla mediante <template> y notifica Toast
-    end
-```
-
-### 4.3. Flujo Transaccional de Facturación (Validación, Descuento y Compensación)
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Operador
-    participant Frontend as Frontend JS
-    participant Fact as Servicio Facturación (:8084)
-    participant Auth as Servicio Auth (:8081)
-    participant Cli as Servicio Clientes (:8083)
-    participant Prod as Servicio Productos (:8082)
-    participant DB as data/facturas.json
-
-    Operador->>Frontend: Selecciona cliente, agrega productos al carrito y genera factura
-    Frontend->>Fact: POST /facturas {cliente_id: 201, items: [{101, 1}, {102, 2}]}
-    
-    Fact->>Auth: GET /auth/me (Forward Bearer Token)
-    Auth-->>Fact: 200 OK {id: 1, nombre: "Ricardo Gómez", rol: "admin"}
-    
-    Fact->>Cli: GET /clientes/201 (Forward Bearer Token)
-    Cli-->>Fact: 200 OK {id: 201, nombre: "Carlos Pérez", cc: "1234567", ...}
-    
-    Fact->>Fact: Combina productos duplicados si existen
-    
-    loop Para cada producto
-        Fact->>Prod: GET /productos/{id}
-        Prod-->>Fact: 200 OK {precio, stock, ...}
-        Fact->>Fact: Valida stock >= cantidad solicitada
-    end
-    
-    alt Stock insuficiente en algún producto
-        Fact-->>Frontend: 422 Unprocessable Entity {"error": "Stock insuficiente para ..."}
-    else Stock validado
-        loop Descontar stock por producto
-            Fact->>Prod: PATCH /productos/{id}/stock {"delta": -cantidad}
-            alt Error en el descuento (ej. concurrencia)
-                Prod-->>Fact: 422 / 500 Error
-                Fact->>Prod: COMPENSACIÓN: PATCH stock con delta positivo para revertir
-                Fact-->>Frontend: 422 Unprocessable Entity (Transacción abortada)
-            else Descuento exitoso
-                Prod-->>Fact: 200 OK
-            end
-        end
-
-        Fact->>Fact: Calcula subtotales y total (roundMoney)
-        Fact->>DB: Store.Create() -> Asigna factura_id autoincremental y fecha actual
-        DB-->>Fact: Factura guardada en facturas.json
-        Fact-->>Frontend: 201 Created {factura_id: 5003, ...}
-        Frontend->>Frontend: Despliega detalle, limpia carrito y actualiza inventario
-    end
-```
-
----
-
-## 5. Estructura y Ejemplo de Factura Generada
-
-El sistema produce facturas con la siguiente estructura JSON estricta y validada:
+Esquema: `{ "factura_id", "cliente": {"id","nombre","email"}, "usuario": {"id","nombre","rol"}, "productos": [{"id","nombre","cantidad","precio_unitario","subtotal"}], "total", "fecha": "YYYY-MM-DD" }`.
 
 ```json
 {
@@ -267,9 +125,7 @@ El sistema produce facturas con la siguiente estructura JSON estricta y validada
   "cliente": {
     "id": 201,
     "nombre": "Carlos Pérez",
-    "cc": "1234567",
-    "email": "carlos@example.com",
-    "direccion": "Calle 123 #45-67, Bogotá"
+    "email": "carlos@example.com"
   },
   "usuario": {
     "id": 1,
@@ -296,70 +152,3 @@ El sistema produce facturas con la siguiente estructura JSON estricta y validada
   "fecha": "2026-10-18"
 }
 ```
-
----
-
-## 6. Decisiones Técnicas de Diseño
-
-1. **Persistencia Genérica en JSON Concurrente (`internal/jsondb`):**
-   - Se utiliza una estructura genérica `Store[T]` parametrizada en Go.
-   - Todo acceso está custodiado por un `sync.RWMutex`: lecturas concurrentes (`RLock`) y escrituras exclusivas (`Lock`).
-   - La persistencia utiliza **escritura atómica**: se escribe primero un archivo temporal en el mismo directorio (`os.CreateTemp`) y luego se sustituye mediante `os.Rename`. Esto impide la corrupción del archivo en caso de fallo o caída de energía.
-
-2. **Control de Stock Atómico y Compensación:**
-   - Para descontar o reponer existencias, el endpoint `PATCH /productos/{id}/stock` opera dentro del lock exclusivo (`WithLock`) evaluando si `stock + delta < 0`.
-   - Si durante una factura multi-ítem el descuento del segundo o tercer producto falla, el servicio de Facturación ejecuta la **compensación inversa** emitiendo deltas positivos a los productos ya modificados antes de retornar el error `422`.
-
-3. **Autenticación con JWT Compartido:**
-   - La firma y validación se centralizan en HMAC-SHA256 (`HS256`) con clave simétrica leída desde `JWT_SECRET`.
-   - La expiración se establece en 8 horas.
-   - El servicio de facturación no sólo valida el token mediante middleware, sino que consulta directamente a `GET /auth/me` para capturar el perfil completo y actualizado del facturador.
-
-4. **Frontend Desacoplado para Google Stitch:**
-   - La arquitectura UI separa completamente la presentación de la lógica.
-   - Ninguna línea de JavaScript consulta clases CSS (como `.card` o `.btn`). Toda consulta al DOM se efectúa mediante selectores `[data-hook="..."]`.
-   - El renderizado de listas repetitivas delega en fragmentos `<template>` para que la estructura HTML pueda rediseñarse sin alterar los bindings funcionales.
-
----
-
-## 7. Instrucciones de Ejecución y Pruebas
-
-### Requisitos:
-- Go 1.22 o superior instalado.
-- Navegador web moderno.
-
-### Comandos de Ejecución Rápida:
-- **Comando Único Directo en Go (Recomendado):**
-  Desde la carpeta raíz `CRUD/` o desde `facturacion-microservicios/`:
-  ```bash
-  go run .
-  ```
-  Inicia concurrentemente los 4 microservicios (`:8081`, `:8082`, `:8083`, `:8084`) y el servidor web (`:3000`). Para detenerlos se pulsa `Ctrl + C`.
-
-- En Linux / macOS con script:
-  ```bash
-  chmod +x run-all.sh
-  ./run-all.sh
-  ```
-- En Windows (PowerShell con script):
-  ```powershell
-  .\run-all.ps1
-  ```
-- O usando Make:
-  ```bash
-  make run
-  ```
-
-### Ejecutar Pruebas Automatizadas:
-```bash
-make test
-# o directamente:
-go test -v ./...
-```
-
-### Exportación a PDF de este Documento:
-Si cuenta con **Pandoc** y **wkhtmltopdf** o **Weasyprint**, puede generar el PDF mediante:
-```bash
-pandoc docs/DOCUMENTO_TECNICO.md -o docs/DOCUMENTO_TECNICO.pdf --pdf-engine=wkhtmltopdf
-```
-Alternativamente, puede abrir el archivo Markdown en Visual Studio Code o cualquier visor con vista previa y seleccionar **"Imprimir a PDF"** desde el navegador.

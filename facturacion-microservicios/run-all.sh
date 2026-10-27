@@ -33,30 +33,28 @@ echo "=========================================================="
 echo "🚀 Levantando Sistema de Facturación Digital Microservicios"
 echo "=========================================================="
 
-mkdir -p logs
-
 # Iniciar Servicio de Autenticación
-PORT=8081 go run cmd/auth/main.go > logs/auth.log 2>&1 &
+PORT=8081 go run cmd/auth/main.go > /dev/null 2>&1 &
 PID_AUTH=$!
 echo "🔐 Servicio Auth iniciado (PID: $PID_AUTH) en http://localhost:8081"
 
 # Iniciar Servicio de Productos
-PORT=8082 go run cmd/productos/main.go > logs/productos.log 2>&1 &
+PORT=8082 go run cmd/productos/main.go > /dev/null 2>&1 &
 PID_PROD=$!
 echo "📦 Servicio Productos iniciado (PID: $PID_PROD) en http://localhost:8082"
 
 # Iniciar Servicio de Clientes
-PORT=8083 go run cmd/clientes/main.go > logs/clientes.log 2>&1 &
+PORT=8083 go run cmd/clientes/main.go > /dev/null 2>&1 &
 PID_CLI=$!
 echo "👥 Servicio Clientes iniciado (PID: $PID_CLI) en http://localhost:8083"
 
 # Iniciar Servicio de Facturación
-PORT=8084 go run cmd/facturacion/main.go > logs/facturacion.log 2>&1 &
+PORT=8084 go run cmd/facturacion/main.go > /dev/null 2>&1 &
 PID_FACT=$!
 echo "🧾 Servicio Facturación iniciado (PID: $PID_FACT) en http://localhost:8084"
 
 # Iniciar Servidor Web Estático
-PORT=3000 go run cmd/web/main.go > logs/web.log 2>&1 &
+PORT=3000 go run cmd/web/main.go > /dev/null 2>&1 &
 PID_WEB=$!
 echo "🌐 Servidor Web iniciado (PID: $PID_WEB) en http://localhost:3000"
 

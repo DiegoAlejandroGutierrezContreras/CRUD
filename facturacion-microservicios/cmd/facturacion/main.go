@@ -47,12 +47,7 @@ func main() {
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
 
-	// Las rutas ya verifican el token internamente consultando al servicio de auth
-	finalHandler := middleware.Chain(mux,
-		middleware.CORS,
-		middleware.Logging,
-		middleware.Recover,
-	)
+	finalHandler := middleware.CORS(mux)
 
 	server := &http.Server{
 		Addr:         ":" + port,

@@ -1,7 +1,7 @@
 // Package facturacion implementa la lógica del servicio de facturación.
 package facturacion
 
-// Factura representa una factura generada.
+// Factura representa una factura generada con el esquema exacto del enunciado.
 type Factura struct {
 	FacturaID int            `json:"factura_id"`
 	Cliente   FacturaCliente `json:"cliente"`
@@ -11,16 +11,14 @@ type Factura struct {
 	Fecha     string         `json:"fecha"`
 }
 
-// FacturaCliente es la información del cliente dentro de una factura.
+// FacturaCliente contiene únicamente id, nombre y email según el enunciado.
 type FacturaCliente struct {
-	ID        int    `json:"id"`
-	Nombre    string `json:"nombre"`
-	CC        string `json:"cc"`
-	Email     string `json:"email"`
-	Direccion string `json:"direccion"`
+	ID     int    `json:"id"`
+	Nombre string `json:"nombre"`
+	Email  string `json:"email"`
 }
 
-// FacturaUsuario es la información del usuario que generó la factura.
+// FacturaUsuario es la información del usuario autenticado que emitió la factura.
 type FacturaUsuario struct {
 	ID     int    `json:"id"`
 	Nombre string `json:"nombre"`
@@ -42,7 +40,7 @@ type CreateFacturaRequest struct {
 	Items     []CreateFacturaItem `json:"items"`
 }
 
-// CreateFacturaItem es un item dentro del request de crear factura.
+// CreateFacturaItem representa un producto y cantidad solicitada.
 type CreateFacturaItem struct {
 	ProductoID int `json:"producto_id"`
 	Cantidad   int `json:"cantidad"`
@@ -73,11 +71,6 @@ type ProductoExterno struct {
 	Nombre string  `json:"nombre"`
 	Precio float64 `json:"precio"`
 	Stock  int     `json:"stock"`
-}
-
-// StockDeltaRequest es el body de PATCH /productos/{id}/stock.
-type StockDeltaRequest struct {
-	Delta int `json:"delta"`
 }
 
 // ErrorExterno es la estructura de error de los servicios externos.

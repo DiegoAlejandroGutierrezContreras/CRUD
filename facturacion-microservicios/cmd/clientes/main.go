@@ -36,17 +36,9 @@ func main() {
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
 
-	// Rutas protegidas por JWT excepto /health
-	protectedMux := http.NewServeMux()
+	// Rutas protegidas por JWT con soporte CORS
 	jwtMiddleware := middleware.RequireJWT(jwtSecret)
-	protectedMux.Handle("GET /health", mux)
-	protectedMux.Handle("/", jwtMiddleware(mux))
-
-	finalHandler := middleware.Chain(protectedMux,
-		middleware.CORS,
-		middleware.Logging,
-		middleware.Recover,
-	)
+	finalHandler := middleware.CORS(jwtMiddleware(mux))
 
 	server := &http.Server{
 		Addr:         ":" + port,

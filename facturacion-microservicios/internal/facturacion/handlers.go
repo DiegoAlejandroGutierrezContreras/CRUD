@@ -7,8 +7,6 @@ import (
 	"io"
 	"math"
 	"net/http"
-	"sort"
-	"strconv"
 	"time"
 
 	"facturacion-microservicios/internal/httpx"
@@ -40,22 +38,9 @@ func NewHandler(store *jsondb.Store[Factura], urls ServiceURLs) *Handler {
 	}
 }
 
-// NewHandlerWithClient crea un handler con un cliente HTTP personalizado (para pruebas).
-func NewHandlerWithClient(store *jsondb.Store[Factura], urls ServiceURLs, client *http.Client) *Handler {
-	return &Handler{
-		store:  store,
-		urls:   urls,
-		client: client,
-	}
-}
-
-// RegisterRoutes registra las rutas del servicio.
+// RegisterRoutes registra la única ruta permitida del servicio: POST /facturas.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /facturas", h.handleCreate)
-	mux.HandleFunc("GET /facturas", h.handleList)
-	mux.HandleFunc("GET /facturas/{id}", h.handleGet)
-	mux.HandleFunc("GET /facturas/{id}/descargar", h.handleDownload)
-	mux.HandleFunc("GET /health", h.handleHealth)
 }
 
 // handleCreate maneja POST /facturas.
@@ -92,38 +77,30 @@ func (h *Handler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Combinar items del mismo producto
+	// Combinar items del mismo producto si hubiese repetidos
 	combinedItems := combineItems(req.Items)
 
-	// 1. Obtener usuario autenticado
+	// 1. Obtener usuario autenticado desde el servicio de Auth
 	usuario, err := h.getUsuario(authHeader)
 	if err != nil {
 		handleServiceError(w, err, "autenticación")
 		return
 	}
 
-	// 2. Obtener cliente
+	// 2. Obtener cliente desde el servicio de Clientes
 	cliente, err := h.getCliente(req.ClienteID, authHeader)
 	if err != nil {
 		handleServiceError(w, err, "clientes")
 		return
 	}
 
-	// 3. Obtener productos y validar stock
+	// 3. Obtener productos desde el servicio de Productos
 	var productosFactura []FacturaItem
-	var productosExternos []ProductoExterno
 
 	for _, item := range combinedItems {
 		producto, err := h.getProducto(item.ProductoID, authHeader)
 		if err != nil {
 			handleServiceError(w, err, "productos")
-			return
-		}
-
-		if producto.Stock < item.Cantidad {
-			httpx.RespondError(w, http.StatusUnprocessableEntity,
-				fmt.Sprintf("Stock insuficiente para '%s' (ID: %d). Disponible: %d, solicitado: %d",
-					producto.Nombre, producto.ID, producto.Stock, item.Cantidad))
 			return
 		}
 
@@ -135,44 +112,17 @@ func (h *Handler) handleCreate(w http.ResponseWriter, r *http.Request) {
 			PrecioUnitario: producto.Precio,
 			Subtotal:       subtotal,
 		})
-		productosExternos = append(productosExternos, *producto)
 	}
 
 	// Calcular total
 	total := CalculateTotal(productosFactura)
 
-	// 4. Descontar stock de cada producto
-	var stockDescontados []struct {
-		productoID int
-		delta      int
-	}
-
-	for i, item := range combinedItems {
-		err := h.patchStock(productosExternos[i].ID, -item.Cantidad, authHeader)
-		if err != nil {
-			// Compensar los descuentos ya hechos
-			for _, descontado := range stockDescontados {
-				_ = h.patchStock(descontado.productoID, descontado.delta, authHeader)
-			}
-			httpx.RespondError(w, http.StatusUnprocessableEntity,
-				fmt.Sprintf("Error descontando stock del producto '%s' (ID: %d): %v. Se revirtieron los cambios anteriores.",
-					productosExternos[i].Nombre, productosExternos[i].ID, err))
-			return
-		}
-		stockDescontados = append(stockDescontados, struct {
-			productoID int
-			delta      int
-		}{productoID: productosExternos[i].ID, delta: item.Cantidad})
-	}
-
-	// 5. Crear la factura
+	// 4. Crear la factura con el esquema exacto (cliente SOLO id, nombre, email)
 	factura := Factura{
 		Cliente: FacturaCliente{
-			ID:        cliente.ID,
-			Nombre:    cliente.Nombre,
-			CC:        cliente.CC,
-			Email:     cliente.Email,
-			Direccion: cliente.Direccion,
+			ID:     cliente.ID,
+			Nombre: cliente.Nombre,
+			Email:  cliente.Email,
 		},
 		Usuario: FacturaUsuario{
 			ID:     usuario.ID,
@@ -186,132 +136,11 @@ func (h *Handler) handleCreate(w http.ResponseWriter, r *http.Request) {
 
 	factura, err = h.store.Create(factura)
 	if err != nil {
-		// Compensar stock si falla guardar la factura
-		for _, descontado := range stockDescontados {
-			_ = h.patchStock(descontado.productoID, descontado.delta, authHeader)
-		}
 		httpx.RespondError(w, http.StatusInternalServerError, "Error guardando la factura")
 		return
 	}
 
 	httpx.RespondCreated(w, factura)
-}
-
-// handleList maneja GET /facturas.
-func (h *Handler) handleList(w http.ResponseWriter, r *http.Request) {
-	// Validar token (verificar header pero solo reenviar al servicio de auth si se quiere verificar)
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		httpx.RespondError(w, http.StatusUnauthorized, "Token de autorización requerido")
-		return
-	}
-
-	// Verificar que el token sea válido consultando al servicio de auth
-	_, err := h.getUsuario(authHeader)
-	if err != nil {
-		handleServiceError(w, err, "autenticación")
-		return
-	}
-
-	facturas, err := h.store.GetAll()
-	if err != nil {
-		httpx.RespondError(w, http.StatusInternalServerError, "Error interno del servidor")
-		return
-	}
-
-	if facturas == nil {
-		facturas = []Factura{}
-	}
-
-	// Ordenar descendente por factura_id
-	sort.Slice(facturas, func(i, j int) bool {
-		return facturas[i].FacturaID > facturas[j].FacturaID
-	})
-
-	httpx.RespondJSON(w, http.StatusOK, facturas)
-}
-
-// handleGet maneja GET /facturas/{id}.
-func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		httpx.RespondError(w, http.StatusUnauthorized, "Token de autorización requerido")
-		return
-	}
-
-	_, err := h.getUsuario(authHeader)
-	if err != nil {
-		handleServiceError(w, err, "autenticación")
-		return
-	}
-
-	id, err := strconv.Atoi(r.PathValue("id"))
-	if err != nil {
-		httpx.RespondError(w, http.StatusBadRequest, "ID de factura inválido")
-		return
-	}
-
-	factura, err := h.store.GetByID(id)
-	if err != nil {
-		httpx.RespondError(w, http.StatusInternalServerError, "Error interno del servidor")
-		return
-	}
-	if factura == nil {
-		httpx.RespondError(w, http.StatusNotFound, fmt.Sprintf("Factura con ID %d no encontrada", id))
-		return
-	}
-
-	httpx.RespondJSON(w, http.StatusOK, factura)
-}
-
-// handleDownload maneja GET /facturas/{id}/descargar.
-func (h *Handler) handleDownload(w http.ResponseWriter, r *http.Request) {
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		httpx.RespondError(w, http.StatusUnauthorized, "Token de autorización requerido")
-		return
-	}
-
-	_, err := h.getUsuario(authHeader)
-	if err != nil {
-		handleServiceError(w, err, "autenticación")
-		return
-	}
-
-	id, err := strconv.Atoi(r.PathValue("id"))
-	if err != nil {
-		httpx.RespondError(w, http.StatusBadRequest, "ID de factura inválido")
-		return
-	}
-
-	factura, err := h.store.GetByID(id)
-	if err != nil {
-		httpx.RespondError(w, http.StatusInternalServerError, "Error interno del servidor")
-		return
-	}
-	if factura == nil {
-		httpx.RespondError(w, http.StatusNotFound, fmt.Sprintf("Factura con ID %d no encontrada", id))
-		return
-	}
-
-	data, err := json.MarshalIndent(factura, "", "  ")
-	if err != nil {
-		httpx.RespondError(w, http.StatusInternalServerError, "Error generando el archivo")
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=factura-%d.json", id))
-	w.WriteHeader(http.StatusOK)
-	w.Write(data)
-}
-
-// handleHealth maneja GET /health.
-func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
-	httpx.RespondJSON(w, http.StatusOK, map[string]string{
-		"status":   "ok",
-		"servicio": "facturacion",
-	})
 }
 
 // --- Clientes HTTP para servicios externos ---
@@ -339,7 +168,6 @@ func handleServiceError(w http.ResponseWriter, err error, servicio string) {
 		return
 	}
 
-	// Mapear códigos del servicio externo
 	switch {
 	case se.StatusCode == http.StatusNotFound:
 		httpx.RespondError(w, http.StatusNotFound, se.Message)
@@ -459,34 +287,12 @@ func (h *Handler) getProducto(id int, authHeader string) (*ProductoExterno, erro
 	return &producto, nil
 }
 
-func (h *Handler) patchStock(productoID, delta int, authHeader string) error {
-	body, status, err := h.doRequest("PATCH",
-		fmt.Sprintf("%s/productos/%d/stock", h.urls.ProductosURL, productoID),
-		authHeader,
-		StockDeltaRequest{Delta: delta})
-	if err != nil {
-		return err
-	}
-
-	if status != http.StatusOK {
-		var errResp ErrorExterno
-		json.Unmarshal(body, &errResp)
-		msg := errResp.Error
-		if msg == "" {
-			msg = "Error actualizando stock"
-		}
-		return &serviceError{StatusCode: status, Message: msg}
-	}
-
-	return nil
-}
-
 // --- Funciones auxiliares ---
 
 // combineItems combina items con el mismo producto_id sumando cantidades.
 func combineItems(items []CreateFacturaItem) []CreateFacturaItem {
-	combined := make(map[int]int) // producto_id -> cantidad total
-	order := []int{}              // mantener orden de aparición
+	combined := make(map[int]int)
+	order := []int{}
 
 	for _, item := range items {
 		if _, exists := combined[item.ProductoID]; !exists {
